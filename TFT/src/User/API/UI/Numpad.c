@@ -32,7 +32,7 @@ const GUI_RECT oldParameterRect = {0,                        0, LCD_WIDTH/2 - BY
 const GUI_RECT newParameterRect = {LCD_WIDTH/2 + BYTE_WIDTH, 0,                LCD_WIDTH,  ICON_START_Y+0*SKEYHEIGHT};
 const GUI_RECT arrowRect        = {LCD_WIDTH/2 - BYTE_WIDTH, 0, LCD_WIDTH/2 + BYTE_WIDTH,  ICON_START_Y+0*SKEYHEIGHT};
 
-void keyPress(u8 index, u8 ispressed)
+void keyPress(uint8_t index, uint8_t ispressed)
 {
   if (index < KEY_NUM)
   {
@@ -43,14 +43,15 @@ void keyPress(u8 index, u8 ispressed)
   }
 }
 
-void Draw_keyboard(u8 * title, bool NumberOnly, bool negative)
+void Draw_keyboard(uint8_t * title, bool NumberOnly, bool negative)
 {
     GUI_ClearRect(0, 0, LCD_WIDTH, rect_of_numkey[0].y0);
     GUI_ClearRect(0, rect_of_numkey[0].y0, LCD_WIDTH, LCD_HEIGHT);
 
     GUI_SetColor(infoSettings.list_border_color);
      //draw button borders
-    for (int i = 0;i<3;i++){
+    for (int i = 0; i < 3; i++)
+    {
       GUI_DrawLine(rect_of_numkey[i].x1,rect_of_numkey[i].y0,rect_of_numkey[12+i].x1,rect_of_numkey[12+i].y1);
       GUI_DrawLine(rect_of_numkey[i*4].x0,rect_of_numkey[i*4].y1,rect_of_numkey[3+i*4].x1,rect_of_numkey[3+i*4].y1);
     }
@@ -76,7 +77,7 @@ void Draw_keyboard(u8 * title, bool NumberOnly, bool negative)
     DrawCharIcon(&rect_of_numkey[NUM_KEY_EXIT], MIDDLE, ICONCHAR_CANCEL, false, 0);
     DrawCharIcon(&rect_of_numkey[NUM_KEY_RESET], MIDDLE, ICONCHAR_RESET, false, 0);
 
-    GUI_DispStringInPrect(&arrowRect,(u8 *)"\u089A");
+    GUI_DispStringInPrect(&arrowRect,(uint8_t *)"\u089A");
     GUI_DispStringInPrect(&oldParameterRect, title);
 
     GUI_RestoreColorDefault();
@@ -90,9 +91,9 @@ float numPadFloat(u8* title, float old_val, float reset_val, bool negative)
     NUM_KEY_VALUES key_num = NUM_KEY_IDLE;
     touchSound = false;
     setLargeFont(true);
-    u8 nowIndex = 0, lastIndex = 0;
+    uint8_t nowIndex = 0, lastIndex = 0;
     char ParameterBuf[FLOAT_BUFLONG + 1] = {0};
-    u8 prec = (old_val == 0) ? 0 : 3;
+    uint8_t prec = (old_val == 0) ? 0 : 3;
     sprintf(ParameterBuf,"%.*f", prec, old_val);
     nowIndex = strlen(ParameterBuf);
 
@@ -100,9 +101,9 @@ float numPadFloat(u8* title, float old_val, float reset_val, bool negative)
     {
       char tempstr[FLOAT_BUFLONG + 1];
       sprintf(tempstr, "%.*f", prec, old_val);
-      title = (u8 *)tempstr;
+      title = (uint8_t *)tempstr;
     }
-    setMenu(MENU_TYPE_FULLSCREEN, NULL, COUNT(rect_of_numkey), rect_of_numkey, keyPress);
+    setMenu(MENU_TYPE_FULLSCREEN, NULL, COUNT(rect_of_numkey), rect_of_numkey, keyPress, NULL);
     Draw_keyboard(title, false, negative);
 
     while (1)
@@ -198,7 +199,7 @@ float numPadFloat(u8* title, float old_val, float reset_val, bool negative)
           BUZZER_PLAY(sound_ok);
           setLargeFont(false);
           touchSound = true;
-          return strtof(ParameterBuf, NULL);
+          return strtod(ParameterBuf, NULL);
         }
       default:
         break;
@@ -209,7 +210,7 @@ float numPadFloat(u8* title, float old_val, float reset_val, bool negative)
         lastIndex = nowIndex;
         GUI_ClearPrect(&newParameterRect);
         setLargeFont(true);
-        GUI_DispStringInPrect(&newParameterRect, (u8 *)ParameterBuf);
+        GUI_DispStringInPrect(&newParameterRect, (uint8_t *)ParameterBuf);
       }
       loopBackEnd();
     }
@@ -234,15 +235,15 @@ int32_t numPadInt(u8* title, int32_t old_val, int32_t reset_val, bool negative)
     {
       char tempstr[INT_BUFLONG + 1];
       sprintf(tempstr, "%i", old_val);
-      title = (u8 *)tempstr;
+      title = (uint8_t *)tempstr;
     }
-    setMenu(MENU_TYPE_FULLSCREEN, NULL, COUNT(rect_of_numkey), rect_of_numkey, keyPress);
+    setMenu(MENU_TYPE_FULLSCREEN, NULL, COUNT(rect_of_numkey), rect_of_numkey, keyPress, NULL);
     Draw_keyboard(title, true, negative);
 
     sprintf(ParameterBuf,"%i",val);
     len = strlen(ParameterBuf);
     setLargeFont(true);
-    GUI_DispStringInPrect(&newParameterRect, (u8 *)ParameterBuf);
+    GUI_DispStringInPrect(&newParameterRect, (uint8_t *)ParameterBuf);
 
     while (1)
     {
@@ -322,7 +323,7 @@ int32_t numPadInt(u8* title, int32_t old_val, int32_t reset_val, bool negative)
         GUI_ClearPrect(&newParameterRect);
         sprintf(ParameterBuf, "%s%i", n, val);
         setLargeFont(true);
-        GUI_DispStringInPrect(&newParameterRect, (u8 *)ParameterBuf);
+        GUI_DispStringInPrect(&newParameterRect, (uint8_t *)ParameterBuf);
       }
       loopBackEnd();
     }

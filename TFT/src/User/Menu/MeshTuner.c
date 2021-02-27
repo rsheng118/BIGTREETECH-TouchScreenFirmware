@@ -1,28 +1,31 @@
 #include "MeshTuner.h"
 #include "includes.h"
 
-#define ITEM_MESH_TUNER_UNIT_NUM 3
-
-static u8 curUnit = 0;
+static uint8_t curUnit_index = 0;
 
 /* Init mesh point */
-void meshInitPoint(uint16_t col, uint16_t row, float value)
+static inline void meshInitPoint(uint16_t col, uint16_t row, float value)
 {
 //  probeHeightEnable();                                     // temporary disable software endstops
 
-  probeHeightStop();                                       // raise nozzle
+  // Z offset gcode sequence start
+  if (infoMachineSettings.zProbe == ENABLED)
+    probeHeightStop();                                     // raise nozzle
 
   mustStoreCmd("G42 I%d J%d\n", col, row);                 // move nozzle to X and Y coordinates corresponding
                                                            // to the column and row in the bed leveling mesh grid
-  probeHeightStart();                                      // lower nozzle to Z0 point
-
-  probeHeightMove(value, 1);                               // move nozzle to Z height
+  probeHeightStart(value);                                 // lower nozzle to provided absolute Z point
+  probeHeightRelative();                                   // set relative position mode
 }
 
 /* Reset mesh point */
-void meshResetPoint(void)
+static inline void meshResetPoint(void)
 {
-  probeHeightStop();                                       // raise nozzle
+  // Z offset gcode sequence stop
+  if (infoMachineSettings.zProbe == ENABLED)
+    probeHeightStop();                                     // raise nozzle
+
+  probeHeightAbsolute();                                   // set absolute position mode
 
 //  probeHeightDisable();                                    // restore original software endstops state
 }
@@ -34,7 +37,7 @@ void meshDrawHeader(uint16_t col, uint16_t row)
   sprintf(tempstr, "I: %d  J: %d", col, row);
 
   GUI_SetColor(infoSettings.sd_reminder_color);
-  GUI_DispString(exhibitRect.x0, exhibitRect.y0, (u8 *) tempstr);
+  GUI_DispString(exhibitRect.x0, exhibitRect.y0, (uint8_t *) tempstr);
   GUI_SetColor(infoSettings.font_color);
 }
 
@@ -45,20 +48,12 @@ void meshDrawValue(float val)
   sprintf(tempstr, "  %.3f  ", val);
 
   setLargeFont(true);
-  GUI_DispStringInPrect(&exhibitRect, (u8 *) tempstr);
+  GUI_DispStringInPrect(&exhibitRect, (uint8_t *) tempstr);
   setLargeFont(false);
 }
 
 float menuMeshTuner(uint16_t col, uint16_t row, float value)
 {
-  const ITEM itemMeshUnit[ITEM_MESH_TUNER_UNIT_NUM] = {
-    // icon                         label
-    {ICON_001_MM,                   LABEL_001_MM},
-    {ICON_01_MM,                    LABEL_01_MM},
-    {ICON_1_MM,                     LABEL_1_MM},
-  };
-
-  const float meshUnit[ITEM_MESH_TUNER_UNIT_NUM] = {0.01f, 0.1f, 1};
 
   // 1 title, ITEM_PER_PAGE items (icon + label)
   MENUITEMS meshItems = {
@@ -75,7 +70,7 @@ float menuMeshTuner(uint16_t col, uint16_t row, float value)
      {ICON_STOP,                    LABEL_CANCEL},}
   };
 
-  #if FRIENDLY_PROBE_OFFSET_LANGUAGE == 1
+  #ifdef FRIENDLY_Z_OFFSET_LANGUAGE
     meshItems.items[0].icon = ICON_NOZZLE_DOWN;
     meshItems.items[0].label.index = LABEL_DOWN;
     meshItems.items[3].icon = ICON_NOZZLE_UP;
@@ -90,19 +85,19 @@ float menuMeshTuner(uint16_t col, uint16_t row, float value)
 
   now = curValue = coordinateGetAxisActual(Z_AXIS);
 
-  meshItems.items[KEY_ICON_4] = itemMeshUnit[curUnit];
+  meshItems.items[KEY_ICON_4] = itemMoveLen[curUnit_index];
 
   menuDrawPage(&meshItems);
   meshDrawHeader(col, row);
   meshDrawValue(now);
 
-#if LCD_ENCODER_SUPPORT
-  encoderPosition = 0;
-#endif
+  #if LCD_ENCODER_SUPPORT
+    encoderPosition = 0;
+  #endif
 
   while (true)
   {
-    unit = meshUnit[curUnit];
+    unit = moveLenSteps[curUnit_index];
 
     curValue = coordinateGetAxisActual(Z_AXIS);
 
@@ -121,9 +116,9 @@ float menuMeshTuner(uint16_t col, uint16_t row, float value)
 
       // change unit
       case KEY_ICON_4:
-        curUnit = (curUnit + 1) % ITEM_MESH_TUNER_UNIT_NUM;
+        curUnit_index = (curUnit_index + 1) % ITEM_FINE_MOVE_LEN_NUM;
 
-        meshItems.items[key_num] = itemMeshUnit[curUnit];
+        meshItems.items[key_num] = itemMoveLen[curUnit_index];
 
         menuDrawItem(&meshItems.items[key_num], key_num);
         break;

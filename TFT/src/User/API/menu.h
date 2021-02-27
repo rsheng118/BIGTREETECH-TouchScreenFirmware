@@ -9,11 +9,12 @@ extern "C" {
 #include <stdbool.h>
 #include "GUI.h"
 
-#define IDLE_TOUCH	0xFFFF
+#define IDLE_TOUCH 0xFFFF
 
 #define ITEM_PER_PAGE       8
 #define MENU_RECT_COUNT     (ITEM_PER_PAGE*2 + 1) // 8 items + title bar
 #define SS_RECT_COUNT       (ITEM_PER_PAGE*2 + 1 + 1) // 8 items + title bar + infobox
+#define TM_RECT_COUNT       (ITEM_PER_PAGE*2 + 1 + 1) // 8 items + title bar + tempbox
 #define LISTITEM_PER_PAGE   5
 #define LIVEICON_LINES      3
 
@@ -51,9 +52,9 @@ typedef enum
   MENU_TYPE_ICON,
   MENU_TYPE_LISTVIEW,
   MENU_TYPE_DIALOG,
+  MENU_TYPE_EDITOR,
   MENU_TYPE_FULLSCREEN,
   MENU_TYPE_OTHER,
-  MENU_TYPE_CUSTOM
 } MENU_TYPE;
 
 typedef union
@@ -115,19 +116,19 @@ typedef struct
 {
   LABEL title;
   //uint16_t titleIconChar;
-  LISTITEM  items[ITEM_PER_PAGE];
+  LISTITEM items[ITEM_PER_PAGE];
 }LISTITEMS;
 
 typedef struct
 {
-  uint8_t *       text;
-  GUI_POINT       pos; // relative to icon top left corner
-  uint8_t         h_align; //left, right or center of pos point
-  uint8_t         v_align; //left, right or center of pos point
-  uint16_t        fn_color;
-  uint16_t        bk_color;
-  GUI_TEXT_MODE   text_mode;
-  bool            large_font;
+  uint8_t *     text;
+  GUI_POINT     pos; // relative to icon top left corner
+  uint8_t       h_align; //left, right or center of pos point
+  uint8_t       v_align; //left, right or center of pos point
+  uint16_t      fn_color;
+  uint16_t      bk_color;
+  GUI_TEXT_MODE text_mode;
+  bool          large_font;
 }LIVE_DATA;
 
  typedef struct
@@ -146,9 +147,6 @@ extern const GUI_RECT rect_of_titleBar[1];
 void setMenuType(MENU_TYPE type);
 MENU_TYPE getMenuType(void);
 
-void setMenuTypeCustom(void (* redrawCallback)(void));
-void menuRedrawCustom();
-
 void reminderSetUnConnected(void);
 void reminderMessage(int16_t inf, SYS_STATUS status);
 void volumeReminderMessage(int16_t inf, SYS_STATUS status);
@@ -161,7 +159,7 @@ LISTITEMS *getCurListItems(void);
 
 void GUI_RestoreColorDefault(void);
 uint8_t *labelGetAddress(const LABEL * label);
-void setMenu(MENU_TYPE menu_type, LABEL * title, uint16_t rectCount, const GUI_RECT * menuRect, void(*action_redraw)(uint8_t position, uint8_t is_press));
+void setMenu(MENU_TYPE menu_type, LABEL * title, uint16_t rectCount, const GUI_RECT * menuRect, void(*action_redraw)(uint8_t position, uint8_t is_press),  void (* menu_redraw)(void));
 void menuDrawItem (const ITEM * menuItem, uint8_t position);
 void menuDrawIconOnly(const ITEM *item, uint8_t position);
 void menuDrawListItem(const LISTITEM *item, uint8_t position);

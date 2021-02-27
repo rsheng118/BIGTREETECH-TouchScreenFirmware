@@ -2,16 +2,27 @@
 #include "includes.h"
 
 //#define ENABLE_PID_STATUS_UPDATE_NOTIFICATION
-#define ITEM_PID_DEGREE_NUM 3
 
-static u8 curDegree = 1;
+const MENUITEMS pidWaitItems = {
+  // title
+  LABEL_PID_TITLE,
+  // icon                         label
+  {{ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},
+   {ICON_BACKGROUND,              LABEL_BACKGROUND},}
+};
 
-const char* const pidDisplayID[] = HEAT_DISPLAY_ID;
-const char*       pidCmd[] = PID_CMD;
-
-HEATER pidHeater = {{}, 0};
+const char *const pidCmd[] = PID_CMD;
+static int16_t pidHeaterTarget[MAX_HEATER_COUNT] = {0};
+static uint8_t curToolIndex = NOZZLE0;
+static uint8_t degreeSteps_index = 1;
 u32 pidTimeout = 0;
-u8 pidCounter = 0;
+uint8_t pidCounter = 0;
 bool pidSucceeded = false;
 bool pidRunning = false;
 bool pidInitialized = false;
@@ -22,55 +33,51 @@ void pidUpdateStatus(bool succeeded)
   if (pidCounter > 0)
     pidCounter--;
 
-  if (!succeeded)                                          // if one PID process fails, the overall PID process must be marked as failed so no save to EEPROM will be allowed
+  if (!succeeded)  // if one PID process fails, the overall PID process must be marked as failed so no save to EEPROM will be allowed
     pidSucceeded = false;
 
-  if (pidCounter > 0)                                      // if all the PID processes were still not terminated, simply provide a notification
+  if (pidCounter > 0)  // if all the PID processes were still not terminated, simply provide a notification
   {
-#ifdef ENABLE_PID_STATUS_UPDATE_NOTIFICATION
-    labelChar(tempMsg, LABEL_PID_TITLE);
+  #ifdef ENABLE_PID_STATUS_UPDATE_NOTIFICATION
+      LABELCHAR(tempMsg, LABEL_PID_TITLE);
 
-    if (succeeded)
-    {
-      sprintf(&tempMsg[strlen(tempMsg)], " %s", textSelect(LABEL_PROCESS_COMPLETED));
-
-      BUZZER_PLAY(sound_notify);
-
-      addToast(DIALOG_TYPE_INFO, tempMsg);
-    }
-    else
-    {
-      sprintf(&tempMsg[strlen(tempMsg)], " %s", textSelect(LABEL_PROCESS_ABORTED));
-
-      BUZZER_PLAY(sound_error);
-
-      addToast(DIALOG_TYPE_ERROR, tempMsg);
-    }
-#endif
+      if (succeeded)
+      {
+        sprintf(&tempMsg[strlen(tempMsg)], " %s", textSelect(LABEL_PROCESS_COMPLETED));
+        BUZZER_PLAY(sound_notify);
+        addToast(DIALOG_TYPE_INFO, tempMsg);
+      }
+      else
+      {
+        sprintf(&tempMsg[strlen(tempMsg)], " %s", textSelect(LABEL_PROCESS_ABORTED));
+        BUZZER_PLAY(sound_error);
+        addToast(DIALOG_TYPE_ERROR, tempMsg);
+      }
+  #endif
   }
-  else                                                     // if all the PID processes terminated, provide the final dialog
+  else  // if all the PID processes terminated, provide the final dialog
   {
     pidRunning = false;
 
-    if (pidSucceeded)                                      // if all the PID processes successfully terminated, allow to save to EEPROM
+    if (pidSucceeded)  // if all the PID processes successfully terminated, allow to save to EEPROM
     {
       BUZZER_PLAY(sound_success);
 
-      labelChar(tempMsg, LABEL_PROCESS_COMPLETED);
+      LABELCHAR(tempMsg, LABEL_PROCESS_COMPLETED);
 
       if (infoMachineSettings.EEPROM == 1)
       {
         sprintf(&tempMsg[strlen(tempMsg)], "\n %s", textSelect(LABEL_EEPROM_SAVE_INFO));
 
-        setDialogText(LABEL_PID_TITLE, (u8 *) tempMsg, LABEL_CONFIRM, LABEL_CANCEL);
+        setDialogText(LABEL_PID_TITLE, (uint8_t *) tempMsg, LABEL_CONFIRM, LABEL_CANCEL);
         showDialog(DIALOG_TYPE_SUCCESS, saveEepromSettings, NULL, NULL);
       }
       else
       {
-        popupReminder(DIALOG_TYPE_SUCCESS, LABEL_PID_TITLE, (u8 *) tempMsg);
+        popupReminder(DIALOG_TYPE_SUCCESS, LABEL_PID_TITLE, (uint8_t *) tempMsg);
       }
     }
-    else                                                   // if at least a PID process failed, provide an error dialog
+    else  // if at least a PID process failed, provide an error dialog
     {
       BUZZER_PLAY(sound_error);
 
@@ -79,58 +86,39 @@ void pidUpdateStatus(bool succeeded)
   }
 }
 
-void pidCheckTimeout(void)
+static inline void pidCheckTimeout(void)
 {
   if (pidRunning)
   {
     if (OS_GetTimeMs() > pidTimeout)
     {
       pidRunning = false;
-
-//      u8 pidCounter = 0;                                 // we voluntary don't reset (commented out the code) also pidCounter and pidSucceeded to let the
-//      pidSucceeded = false;                              // pidUpdateStatus function allow to handle status updates eventually arriving after the timeout
-
-      labelChar(tempMsg, LABEL_TIMEOUT_REACHED);
+    //  uint8_t pidCounter = 0;  // we voluntary don't reset (commented out the code) also pidCounter and pidSucceeded to let the
+    //  pidSucceeded = false;  // pidUpdateStatus function allow to handle status updates eventually arriving after the timeout
+      LABELCHAR(tempMsg, LABEL_TIMEOUT_REACHED);
 
       sprintf(&tempMsg[strlen(tempMsg)], "\n %s", textSelect(LABEL_PROCESS_ABORTED));
-
       BUZZER_PLAY(sound_error);
-
-      popupReminder(DIALOG_TYPE_ERROR, LABEL_PID_TITLE, (u8 *) tempMsg);
+      popupReminder(DIALOG_TYPE_ERROR, LABEL_PID_TITLE, (uint8_t *) tempMsg);
     }
   }
 }
 
-void pidUpdateCounter(void)
+static inline void pidUpdateCounter(void)
 {
   pidCounter = 0;
 
-  for (uint8_t i = 0; i < MAX_HEATER_COUNT; i++)           // hotends + bed + chamber
+  for (uint8_t i = 0; i < MAX_HEATER_COUNT; i++)  // hotends + bed + chamber
   {
-    if (pidHeater.T[i].target > 0)
+    if (pidHeaterTarget[i] > 0)
       pidCounter++;
   }
 }
 
 void menuPidWait(void)
 {
-  // 1 title, ITEM_PER_PAGE items (icon + label)
-  const MENUITEMS pidWaitItems = {
-    // title
-    LABEL_PID_TITLE,
-    // icon                         label
-    {{ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},
-     {ICON_BACKGROUND,              LABEL_BACKGROUND},}
-  };
-
-  bool isPressed, isReleased;
-  isPressed = isReleased = false;
+  bool isPressed = false;
+  bool isReleased = false;
 
   menuDrawPage(&pidWaitItems);
 
@@ -139,12 +127,12 @@ void menuPidWait(void)
 
   while (infoMenu.menu[infoMenu.cur] == menuPidWait)
   {
-    if (!isPressed)                                        // if touch screen is not yet pressed
+    if (!isPressed)  // if touch screen is not yet pressed
     {
-      if (isPress())                                       // if touch screen is now pressed
+      if (isPress())  // if touch screen is now pressed
         isPressed = true;
     }
-    else if (!isPress())                                   // if touch screen is now released
+    else if (!isPress())  // if touch screen is now released
     {
       isReleased = true;
     }
@@ -158,29 +146,29 @@ void menuPidWait(void)
   }
 }
 
-void pidStart(void)
+static inline void pidStart(void)
 {
   pidRunning = true;
   pidSucceeded = true;
 
-  pidUpdateCounter();                                                          // update the number of set temperatures (number of PID processes to execute)
-  pidTimeout = OS_GetTimeMs() + PID_PROCESS_TIMEOUT;                           // set timeout for overall PID process
+  pidUpdateCounter();  // update the number of set temperatures (number of PID processes to execute)
+  pidTimeout = OS_GetTimeMs() + PID_PROCESS_TIMEOUT;  // set timeout for overall PID process
 
-  mustStoreCmd("M150 R255 U0 B0\n");                                           // set LED light to RED
-  mustStoreCmd("M106 S255\n");                                                 // set fan speed to max
-  mustStoreCmd("G4 S1\n");                                                     // wait 1 sec
+  mustStoreCmd("M150 R255 U0 B0\n");  // set LED light to RED
+  mustStoreCmd("M106 S255\n");        // set fan speed to max
+  mustStoreCmd("G4 S1\n");            // wait 1 sec
 
-  for (uint8_t i = 0; i < MAX_HEATER_COUNT; i++)                               // hotends + bed + chamber
+  for (uint8_t i = 0; i < MAX_HEATER_COUNT; i++)  // hotends + bed + chamber
   {
-    if (pidHeater.T[i].target > 0)
+    if (pidHeaterTarget[i] > 0)
     {
-      mustStoreCmd("%s S%d\n", pidCmd[i], (int) pidHeater.T[i].target);        // start PID autotune
-      mustStoreCmd("G4 S1\n");                                                 // wait 1 sec
+      mustStoreCmd("%s S%d\n", pidCmd[i], (int)pidHeaterTarget[i]);  // start PID autotune
+      mustStoreCmd("G4 S1\n");                                          // wait 1 sec
     }
   }
 
-  mustStoreCmd("M107\n");                                                      // stop fan
-  mustStoreCmd("M150 R0 U255 B0\n");                                           // set LED light to GREEN
+  mustStoreCmd("M107\n");             // stop fan
+  mustStoreCmd("M150 R0 U255 B0\n");  // set LED light to GREEN
 
   infoMenu.menu[++infoMenu.cur] = menuPidWait;
 }
@@ -191,43 +179,18 @@ void pidTemperatureReDraw(bool skip_header)
 
   if (!skip_header)
   {
-    sprintf(tempstr, "%s    ", pidDisplayID[pidHeater.toolIndex]);
-
-    GUI_DispString(exhibitRect.x0, exhibitRect.y0, (u8 *) tempstr);
+    sprintf(tempstr, "%s    ", heatDisplayID[curToolIndex]);
+    GUI_DispString(exhibitRect.x0, exhibitRect.y0, (uint8_t *) tempstr);
   }
 
-  sprintf(tempstr, "  %d  ", pidHeater.T[pidHeater.toolIndex].target);
-
+  sprintf(tempstr, "  %d  ", pidHeaterTarget[curToolIndex]);
   setLargeFont(true);
-
-  GUI_DispStringInPrect(&exhibitRect, (u8 *) tempstr);
-
+  GUI_DispStringInPrect(&exhibitRect, (uint8_t *) tempstr);
   setLargeFont(false);
 }
 
 void menuPid(void)
 {
-  const ITEM itemPidTool[] = {
-    // icon                         label
-    {ICON_NOZZLE,                   LABEL_NOZZLE},
-    {ICON_NOZZLE,                   LABEL_NOZZLE},
-    {ICON_NOZZLE,                   LABEL_NOZZLE},
-    {ICON_NOZZLE,                   LABEL_NOZZLE},
-    {ICON_NOZZLE,                   LABEL_NOZZLE},
-    {ICON_NOZZLE,                   LABEL_NOZZLE},
-    {ICON_BED,                      LABEL_BED},
-    {ICON_CHAMBER,                  LABEL_CHAMBER},        // that will never be displayed because no PID is provided for chamber
-  };
-
-  const ITEM itemPidDegree[ITEM_PID_DEGREE_NUM] = {
-    // icon                         label
-    {ICON_1_DEGREE,                 LABEL_1_DEGREE},
-    {ICON_5_DEGREE,                 LABEL_5_DEGREE},
-    {ICON_10_DEGREE,                LABEL_10_DEGREE},
-  };
-
-  const u8 pidDegree[ITEM_PID_DEGREE_NUM] = {1, 5, 10};
-
   // 1 title, ITEM_PER_PAGE items (icon + label)
   MENUITEMS pidItems = {
     // title
@@ -245,18 +208,18 @@ void menuPid(void)
 
   KEY_VALUES key_num = KEY_IDLE;
 
-  if (!pidInitialized)                                     // in order to keep the current set values even when reloading the menu
-  {                                                        // we initialize the data structure only the first time the menu is loaded
+  if (!pidInitialized)  // in order to keep the current set values even when reloading the menu
+  {                     // we initialize the data structure only the first time the menu is loaded
     for (uint8_t i = NOZZLE0; i < MAX_HEATER_COUNT; i++)
     {
-      pidHeater.T[i].target = 0;
+      pidHeaterTarget[i] = 0;
     }
 
     pidInitialized = true;
   }
 
-  pidItems.items[KEY_ICON_4] = itemPidTool[pidHeater.toolIndex];
-  pidItems.items[KEY_ICON_5] = itemPidDegree[curDegree];
+  pidItems.items[KEY_ICON_4] = itemTool[curToolIndex];
+  pidItems.items[KEY_ICON_5] = itemDegreeSteps[degreeSteps_index];
 
   #if LCD_ENCODER_SUPPORT
     encoderPosition = 0;
@@ -271,17 +234,35 @@ void menuPid(void)
     switch (key_num)
     {
       case KEY_ICON_0:
-        if (pidHeater.T[pidHeater.toolIndex].target > 0)
-          pidHeater.T[pidHeater.toolIndex].target =
-            NOBEYOND(0, pidHeater.T[pidHeater.toolIndex].target - pidDegree[curDegree], infoSettings.max_temp[pidHeater.toolIndex]);
+        if (pidHeaterTarget[curToolIndex] > 0)
+          pidHeaterTarget[curToolIndex] =
+              NOBEYOND(0, pidHeaterTarget[curToolIndex] - degreeSteps[degreeSteps_index],
+                       infoSettings.max_temp[curToolIndex]);
 
         pidTemperatureReDraw(true);
         break;
 
+      case KEY_INFOBOX:
+      {
+        char titlestr[30];
+        sprintf(titlestr, "Min:0 | Max:%i", infoSettings.max_temp[curToolIndex]);
+
+        int32_t val = numPadInt((uint8_t *) titlestr, pidHeaterTarget[curToolIndex], 0, false);
+        val = NOBEYOND(0, val, infoSettings.max_temp[curToolIndex]);
+
+        if (val != pidHeaterTarget[curToolIndex])  // if value is different than target change it
+          pidHeaterTarget[curToolIndex] = val;
+
+        menuDrawPage(&pidItems);
+        pidTemperatureReDraw(true);
+        break;
+      }
+
       case KEY_ICON_3:
-        if (pidHeater.T[pidHeater.toolIndex].target < infoSettings.max_temp[pidHeater.toolIndex])
-          pidHeater.T[pidHeater.toolIndex].target =
-            NOBEYOND(0, pidHeater.T[pidHeater.toolIndex].target + pidDegree[curDegree], infoSettings.max_temp[pidHeater.toolIndex]);
+        if (pidHeaterTarget[curToolIndex] < infoSettings.max_temp[curToolIndex])
+          pidHeaterTarget[curToolIndex] =
+              NOBEYOND(0, pidHeaterTarget[curToolIndex] + degreeSteps[degreeSteps_index],
+                       infoSettings.max_temp[curToolIndex]);
 
         pidTemperatureReDraw(true);
         break;
@@ -289,20 +270,18 @@ void menuPid(void)
       case KEY_ICON_4:
         do
         {
-          pidHeater.toolIndex = (pidHeater.toolIndex + 1) % MAX_HEATER_COUNT;
-        }
-        while (!heaterIsValid(pidHeater.toolIndex) || pidHeater.toolIndex == CHAMBER);
+          curToolIndex = (curToolIndex + 1) % MAX_HEATER_COUNT;
+        } while (!heaterIsValid(curToolIndex) || curToolIndex == CHAMBER);
 
-        pidItems.items[key_num] = itemPidTool[pidHeater.toolIndex];
+        pidItems.items[key_num] = itemTool[curToolIndex];
 
         menuDrawItem(&pidItems.items[key_num], key_num);
         pidTemperatureReDraw(false);
         break;
 
       case KEY_ICON_5:
-        curDegree = (curDegree + 1) % ITEM_PID_DEGREE_NUM;
-
-        pidItems.items[key_num] = itemPidDegree[curDegree];
+        degreeSteps_index = (degreeSteps_index + 1) % ITEM_DEGREE_NUM;
+        pidItems.items[key_num] = itemDegreeSteps[degreeSteps_index];
 
         menuDrawItem(&pidItems.items[key_num], key_num);
         break;
@@ -337,14 +316,19 @@ void menuPid(void)
           if (encoderPosition)
           {
             if (encoderPosition > 0)
-              if (pidHeater.T[pidHeater.toolIndex].target < infoSettings.max_temp[pidHeater.toolIndex])
-                pidHeater.T[pidHeater.toolIndex].target =
-                  NOBEYOND(0, pidHeater.T[pidHeater.toolIndex].target + pidDegree[curDegree], infoSettings.max_temp[pidHeater.toolIndex]);
-
-            if (encoderPosition < 0)
-              if (pidHeater.T[pidHeater.toolIndex].target > 0)
-                pidHeater.T[pidHeater.toolIndex].target =
-                  NOBEYOND(0, pidHeater.T[pidHeater.toolIndex].target - pidDegree[curDegree], infoSettings.max_temp[pidHeater.toolIndex]);
+            {
+              if (pidHeaterTarget[curToolIndex] < infoSettings.max_temp[curToolIndex])
+                pidHeaterTarget[curToolIndex] =
+                    NOBEYOND(0, pidHeaterTarget[curToolIndex] + degreeSteps[degreeSteps_index],
+                             infoSettings.max_temp[curToolIndex]);
+            }
+            else  // if < 0
+            {
+              if (pidHeaterTarget[curToolIndex] > 0)
+                pidHeaterTarget[curToolIndex] =
+                    NOBEYOND(0, pidHeaterTarget[curToolIndex] - degreeSteps[degreeSteps_index],
+                             infoSettings.max_temp[curToolIndex]);
+            }
 
             pidTemperatureReDraw(true);
             encoderPosition = 0;

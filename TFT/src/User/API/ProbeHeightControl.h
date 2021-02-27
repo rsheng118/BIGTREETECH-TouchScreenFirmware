@@ -18,10 +18,16 @@ void probeHeightEnable(void);
 void probeHeightDisable(void);
 
 /* Start probe height */
-void probeHeightStart(void);
+void probeHeightStart(float initialHeight);
 
 /* Stop probe height */
 void probeHeightStop(void);
+
+/* Set probe height to relative position mode */
+void probeHeightRelative(void);
+
+/* Set probe height to absolute position mode */
+void probeHeightAbsolute(void);
 
 /* Change probe height */
 void probeHeightMove(float unit, int8_t direction);
